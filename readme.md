@@ -85,23 +85,23 @@ response.headers["X-Custom-Header"] = new_value # Set ulang ke header
 
 # Cheat Sheets
 
-Selain request.headers, Flask punya banyak hal terkait HTTP request:
+📥 Selain request.headers, Flask punya banyak hal terkait HTTP request:
 
-1. request.args → ambil query parameter (data di URL setelah ?).
+1. **request.args** → ambil query parameter (data di URL setelah ?).
     * Contoh: /search?q=flask → request.args.get("q")
 
-2. request.form → ambil data dari form (POST request dengan application/x-www-form-urlencoded).
+2. **request.form** → ambil data dari form (POST request dengan application/x-www-form-urlencoded).
     * Contoh: form login HTML.
 
-3. request.json → ambil body request dalam format JSON (kalau Content-Type: application/json).
+3. **request.json** → ambil body request dalam format JSON (kalau Content-Type: application/json).
     * Contoh: API modern.
 
-4.  request.cookies → ambil cookies yang dikirim client (cookies juga sebenarnya dikirim lewat header: Cookie: session_id=xxx).
+4.  **request.cookies** → ambil cookies yang dikirim client (cookies juga sebenarnya dikirim lewat header: Cookie: session_id=xxx).
 
-5. request.method → lihat method request (GET, POST, PUT, DELETE).
+5. **request.method** → lihat method request (GET, POST, PUT, DELETE).
     * Kadang dikombinasikan dengan header X-HTTP-Method-Override.
 
-6. request.remote_addr → IP client (kadang berasal dari header X-Forwarded-For jika lewat proxy).
+6. **request.remote_addr** → IP client (kadang berasal dari header X-Forwarded-For jika lewat proxy).
 
 👉 Jadi headers adalah salah satu bagian dari request, selain query, form, JSON body, cookies.
 
