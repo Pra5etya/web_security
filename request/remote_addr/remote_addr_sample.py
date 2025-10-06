@@ -3,6 +3,8 @@ import ipaddress
 import geoip2.database
 from geoip2.errors import AddressNotFoundError
 
+# pada kode ini terdapat hole (jika menggunakan proxy maka tidak bisa menemukan ip aslinya) serta membutuhkan database asli untuk deteksi geolocation
+
 app = Flask(__name__)
 
 # Path ke database GeoLite2 (ubah sesuai lokasi)
