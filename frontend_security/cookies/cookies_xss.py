@@ -1,36 +1,62 @@
-from flask import Response
+from flask import Response, request
 from .utils import generate_token
-
-# ============================================================
-# 🍪 PROTEKSI COOKIE DARI AKSES JAVASCRIPT (ANTI-XSS)
-# ============================================================
 
 def mitigate_cookie_theft_via_xss(
     response: Response,
     cookie_name: str = "session_id",
-    session_value: str = None,
-    max_age: int = 1800
+    session_value: str | None = None,
+    max_age: int = 1800,
+    expires: str | None = None,
+    path: str = "/",
+    domain: str | None = None,
+    secure: bool = True,
+    http_only: bool = True,
+    same_site: str = "Strict",
+    priority: str | None = "High",
+    partitioned: bool = False,
+    same_party: bool = False,
+    ensure_domain_from_request: bool = True
 ):
     """
-    Mencegah pencurian cookie oleh script berbahaya (XSS)
-    dengan cara menonaktifkan akses JavaScript ke cookie.
+    Set cookie untuk mencegah pencurian via XSS
     """
+    if domain is None and ensure_domain_from_request:
+        domain = request.host  # default domain = request host
 
-    # Jika belum ada nilai session, buat token acak aman
     if session_value is None:
-        session_value = generate_token(32)
+        session_value = generate_token(32)  # buat token acak
 
-    # Konfigurasi cookie dengan parameter keamanan maksimal
+    if same_site not in {"Strict", "Lax", "None"}:
+        raise ValueError("same_site harus 'Strict', 'Lax', atau 'None'")
+    if same_site == "None" and not secure:
+        raise ValueError("Jika same_site='None', maka secure must be True")
+
     response.set_cookie(
-        key=cookie_name,       # Nama cookie (misal: session_id)
-        value=session_value,   # Nilai session/token
-        max_age=max_age,       # Masa hidup cookie dalam detik
-        secure=True,           # ✅ Hanya dikirim melalui HTTPS
-        httponly=True,         # ✅ Tidak bisa diakses lewat document.cookie (JavaScript)
-        samesite="Strict",     # ✅ Tidak dikirim ke domain lain (anti-CSRF dasar)
-        path="/",              # ✅ Berlaku untuk semua path di domain
+        key=cookie_name,
+        value=session_value,
+        max_age=max_age,
+        expires=expires,
+        path=path,
+        domain=domain,
+        secure=secure,
+        httponly=http_only,
+        samesite=same_site
     )
 
-    # Setelah ini, cookie hanya dapat dikirim otomatis oleh browser via HTTPS
-    # dan tidak dapat dibaca oleh JavaScript apa pun di halaman.
+    cookie_headers = response.headers.getlist("Set-Cookie")
+    if cookie_headers:
+        updated = []
+        for h in cookie_headers:
+            if h.startswith(f"{cookie_name}="):
+                extras = ""
+                if priority:
+                    extras += f"; Priority={priority}"
+                if partitioned:
+                    extras += "; Partitioned"
+                if same_party:
+                    extras += "; SameParty"
+                h = h + extras
+            updated.append(h)
+        response.headers.set("Set-Cookie", ", ".join(updated))
+
     return response

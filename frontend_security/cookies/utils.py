@@ -9,41 +9,31 @@ from flask import request, current_app
 
 def generate_token(length=32):
     """
-    Membuat token acak aman (misal untuk CSRF atau session ID)
-    - secrets.token_urlsafe() menghasilkan token base64 aman untuk URL
+    Membuat token acak aman untuk CSRF atau session
     """
-    return secrets.token_urlsafe(length)
+    return secrets.token_urlsafe(length)  # token url-safe acak
 
 
 def generate_fingerprint():
     """
-    Membuat fingerprint unik dari kombinasi IP + User-Agent.
-    Digunakan untuk mengikat session cookie ke perangkat pengguna tertentu.
+    Membuat fingerprint unik dari IP + User-Agent untuk mengikat session
     """
-    # Ambil header User-Agent, batasi 100 karakter (menghindari payload panjang)
-    ua = request.headers.get("User-Agent", "")[:100]
-    # Ambil alamat IP dari header X-Forwarded-For jika ada (proxy-aware)
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-    # Hash kombinasi IP dan UA untuk hasil tetap namun aman
-    return hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:32]
+    ua = request.headers.get("User-Agent", "")[:100]  # ambil 100 karakter pertama
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)  # ambil IP client
+    return hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:32]  # hash fingerprint
 
 
 def sign_data(data: str) -> str:
     """
-    Menandatangani data menggunakan HMAC-SHA256.
-    Tujuannya agar data (misal session) tidak bisa dimodifikasi oleh klien.
+    HMAC signature untuk data (misal session) agar tidak dimodifikasi
     """
-    # Ambil secret key Flask
-    secret = current_app.secret_key.encode()
-    # Buat signature HMAC
+    secret = current_app.secret_key.encode()  # ambil secret key Flask
     return hmac.new(secret, data.encode(), "sha256").hexdigest()
 
 
 def verify_signature(data: str, signature: str) -> bool:
     """
-    Verifikasi apakah tanda tangan HMAC valid.
+    Verifikasi HMAC signature data
     """
-    # Hitung ulang signature dari data
     expected = sign_data(data)
-    # Bandingkan secara aman (hindari timing attack)
     return hmac.compare_digest(expected, signature)

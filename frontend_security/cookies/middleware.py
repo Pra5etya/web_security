@@ -1,44 +1,46 @@
 from flask import request, g
 from .cookies_xss import mitigate_cookie_theft_via_xss
-from .csrf_protection import set_csrf_cookie
-from .session_protection import create_secure_session_cookie
+from .csrf_protection import set_csrf_cookie, verify_csrf_request
+from .session_protection import create_secure_session_cookie, verify_secure_session_cookie
+from .headers import set_security_headers
+import logging
 
-def register_security_middleware(app):
-    """
-    Fungsi untuk mendaftarkan middleware pada Flask app
-    """
+logger = logging.getLogger("security")
 
-    # ============================================================
-    # 1️⃣ Sebelum request: bisa digunakan untuk logging / fingerprint
-    # ============================================================
+def register_security_middleware(app, excluded_routes=None):
+    """
+    Middleware entry+exit
+    """
+    if excluded_routes is None:
+        excluded_routes = []
+
     @app.before_request
     def before_request():
-        # Simpan fingerprint di g untuk route lain jika diperlukan
-        ua = request.headers.get("User-Agent", "")[:100]
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-        g.fingerprint = f"{ip}|{ua}"
-        # Bisa tambahkan logging keamanan, deteksi bot, dsb
-        return None  # tidak memblokir request
+        g.fingerprint = f"{request.headers.get('X-Forwarded-For', request.remote_addr)}|{request.headers.get('User-Agent','')[:100]}"
+        endpoint = request.endpoint
+        if endpoint in excluded_routes:
+            return None
 
-    # ============================================================
-    # 2️⃣ Setelah request: otomatis set semua cookie aman
-    # ============================================================
+        if not verify_secure_session_cookie(request):
+            logger.warning(f"Invalid session for {endpoint} from {request.remote_addr}")
+            return {"error": "Invalid session"}, 401
+
+        if request.method in ["POST", "PUT", "DELETE"]:
+            if not verify_csrf_request(request):
+                logger.warning(f"CSRF verification failed for {endpoint} from {request.remote_addr}")
+                return {"error": "CSRF verification failed"}, 403
+
+        return None
+
     @app.after_request
     def after_request(response):
-        """
-        Set cookie security otomatis untuk semua response.
-        - Lindungi session dari XSS
-        - Buat CSRF token
-        - Rotasi session jika perlu
-        """
+        endpoint = request.endpoint
+        if endpoint in excluded_routes:
+            return response
 
-        # 1️⃣ Cookie theft via XSS
+        response = set_security_headers(response)
         response = mitigate_cookie_theft_via_xss(response)
-
-        # 2️⃣ CSRF token cookie (bisa dibaca JS untuk double-submit)
-        response, csrf_token = set_csrf_cookie(response)
-
-        # 3️⃣ Rotasi session dan buat session cookie aman
         response = create_secure_session_cookie(response)
+        response, _ = set_csrf_cookie(response)
 
         return response

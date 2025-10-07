@@ -1,92 +1,133 @@
-from flask import Response, request
+from flask import Response, request, current_app
 from .utils import generate_token, generate_fingerprint, sign_data, verify_signature
-
-# ============================================================
-# 🔐 SESSION SECURITY
-# ============================================================
+import time
+from typing import Callable, Optional
 
 def create_secure_session_cookie(
     response: Response,
-    cookie_name="session_id",
-    max_age=1800,
-    old_session=None
+    cookie_name: str = "session_id",
+    session_id: str | None = None,
+    max_age: int = 1800,
+    path: str = "/",
+    domain: str | None = None,
+    secure: bool = True,
+    http_only: bool = True,
+    same_site: str = "Strict",
+    sign: bool = True,
+    secret_key: str | None = None,
+    bind_fingerprint: bool = True,
+    fingerprint_func: Callable[[], str] | None = None,
+    rotate: bool = True,
+    renew_on_activity: bool = True,
+    idle_timeout: Optional[int] = None,
+    absolute_timeout: Optional[int] = None,
+    server_side_store: Optional[Callable[[str, dict], None]] = None,
+    ensure_domain_from_request: bool = True
 ):
     """
-    Membuat session cookie aman dengan:
-    1. Rotasi session ID (anti-fixation)
-    2. Fingerprint browser/IP
-    3. HMAC signature untuk verifikasi integritas
+    Buat session cookie aman
     """
+    if domain is None and ensure_domain_from_request:
+        domain = request.host
 
-    # 1️⃣ Buat session ID baru (token acak)
-    session_id = generate_token(24)
+    if not session_id:
+        session_id = generate_token(24)
 
-    # 2️⃣ Buat fingerprint unik dari IP dan User-Agent
-    fingerprint = generate_fingerprint()
+    if bind_fingerprint:
+        fingerprint = fingerprint_func() if fingerprint_func else generate_fingerprint()
+    else:
+        fingerprint = ""
 
-    # 3️⃣ Gabungkan session ID dan fingerprint
-    session_data = f"{session_id}|{fingerprint}"
+    session_data = f"{session_id}|{fingerprint}" if fingerprint else session_id
 
-    # 4️⃣ Tambahkan tanda tangan (HMAC) agar cookie tidak bisa diubah klien
-    sig = sign_data(session_data)
-    session_value = f"{session_data}|{sig}"
+    used_secret = secret_key or getattr(current_app, "secret_key", None)
+    if sign:
+        if not used_secret:
+            raise ValueError("secret_key diperlukan untuk sign=True")
+        signature = sign_data(session_data)
+        cookie_value = f"{session_data}|{signature}"
+    else:
+        cookie_value = session_data
 
-    # 5️⃣ Jika ada session lama, hapus untuk mencegah reuse
-    if old_session:
-        response.set_cookie(
-            key=cookie_name,
-            value="",        # Kosongkan nilai lama
-            max_age=0,       # Expire segera
-            path="/",
-            secure=True,
-            httponly=True,
-            samesite="Strict"
-        )
+    if server_side_store:
+        meta = {
+            "created_at": int(time.time()),
+            "last_activity": int(time.time()),
+            "max_age": max_age,
+            "idle_timeout": idle_timeout,
+            "absolute_timeout": absolute_timeout
+        }
+        try:
+            server_side_store(session_id, meta)
+        except Exception:
+            pass
 
-    # 6️⃣ Simpan session baru di cookie
     response.set_cookie(
-        key=cookie_name,      # Nama cookie
-        value=session_value,  # Nilai berisi ID + fingerprint + signature
-        secure=True,          # ✅ Hanya via HTTPS
-        httponly=True,        # ✅ Tidak bisa diakses JS
-        samesite="Strict",    # ✅ Tidak dikirim ke domain lain
-        path="/",             # ✅ Berlaku global
-        max_age=max_age,      # Berlaku 30 menit
+        key=cookie_name,
+        value=cookie_value,
+        max_age=max_age,
+        path=path,
+        domain=domain,
+        secure=secure,
+        httponly=http_only,
+        samesite=same_site
     )
 
-    # Cookie ini sekarang aman dari manipulasi & reuse.
     return response
 
 
-def verify_secure_session_cookie(request, cookie_name="session_id") -> bool:
+def verify_secure_session_cookie(
+    request,
+    cookie_name: str = "session_id",
+    secret_key: str | None = None,
+    verify_signature_flag: bool = True,
+    bind_fingerprint: bool = True,
+    fingerprint_func: Callable[[], str] | None = None,
+    server_side_lookup: Optional[Callable[[str], dict]] = None
+) -> bool:
     """
-    Verifikasi session cookie:
-    - Pastikan struktur cookie valid (3 bagian)
-    - Pastikan HMAC signature benar
-    - Pastikan fingerprint cocok (tidak dicuri dari browser lain)
+    Verifikasi session cookie
     """
-
-    # 1️⃣ Ambil cookie session dari request
-    cookie_val = request.cookies.get(cookie_name)
-    if not cookie_val:
+    raw = request.cookies.get(cookie_name)
+    if not raw:
         return False
 
-    # 2️⃣ Pastikan cookie memiliki format benar: id|fingerprint|sig
-    parts = cookie_val.split("|")
-    if len(parts) != 3:
-        return False
+    parts = raw.split("|")
+    if len(parts) == 1:
+        session_id = parts[0]
+        fingerprint = ""
+        signature = ""
+    elif len(parts) == 2:
+        session_id, signature = parts
+        fingerprint = ""
+    else:
+        session_id, fingerprint, signature = parts[0], parts[1], parts[2]
 
-    # Pisahkan komponennya
-    session_id, fingerprint, sig = parts
+    if verify_signature_flag:
+        original = f"{session_id}|{fingerprint}" if fingerprint else session_id
+        if not verify_signature(original, signature):
+            return False
 
-    # 3️⃣ Verifikasi tanda tangan (HMAC)
-    if not verify_signature(f"{session_id}|{fingerprint}", sig):
-        return False  # Signature salah → cookie diubah manual
+    if bind_fingerprint and fingerprint:
+        current_fp = fingerprint_func() if fingerprint_func else generate_fingerprint()
+        if not hmac.compare_digest(current_fp, fingerprint):
+            return False
 
-    # 4️⃣ Verifikasi fingerprint cocok dengan perangkat saat ini
-    current_fingerprint = generate_fingerprint()
-    if current_fingerprint != fingerprint:
-        return False  # Kemungkinan cookie dicuri dari browser lain
+    if server_side_lookup:
+        try:
+            meta = server_side_lookup(session_id)
+            if not meta:
+                return False
+            now = int(time.time())
+            if meta.get("absolute_timeout") and meta.get("created_at"):
+                if now > meta["created_at"] + meta["absolute_timeout"]:
+                    return False
+            if meta.get("idle_timeout") and meta.get("last_activity"):
+                if now > meta["last_activity"] + meta["idle_timeout"]:
+                    return False
+            if meta.get("revoked"):
+                return False
+        except Exception:
+            return False
 
-    # ✅ Semua valid
     return True
