@@ -24,7 +24,7 @@
 
 # Cookie & Session (cookies, SameSite, HttpOnly)
 
-1. Cookie theft via XSS (JS access / HTML Char Entities) 
+1. Cookie theft via XSS (JS access & HTML Char Entities) 
     * Mitigasi: simpan session/token di cookie HttpOnly; Secure; SameSite=Strict — jangan di localStorage untuk token sensitif.
 
 2. CSRF (dengan cookies otomatis dikirim)

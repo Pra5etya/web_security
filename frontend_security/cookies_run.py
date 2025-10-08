@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from security import register_security_middleware, verify_csrf_request, verify_secure_session_cookie
+from cookies import register_security_middleware, verify_csrf_request, verify_secure_session_cookie
 
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-me"
