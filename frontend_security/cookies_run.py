@@ -6,6 +6,10 @@ app.secret_key = "super-secret-key-change-me"
 
 register_security_middleware(app, excluded_routes=["login", "public_endpoint"])
 
+@app.route('/')
+def home():
+    return 'Hello, Flask with HTTPS!'
+
 @app.route("/login")
 def login():
     return {"message": "Login berhasil"}
@@ -18,9 +22,12 @@ def public_endpoint():
 def update_profile():
     if not verify_csrf_request(request):
         return {"error": "CSRF verification failed"}, 403
+    
     if not verify_secure_session_cookie(request):
         return {"error": "Invalid session"}, 401
+    
     return {"message": "Profil berhasil diperbarui"}
 
 if __name__ == "__main__":
-    app.run(debug=True, ssl_context="adhoc")
+    app.run(debug=True, 
+            ssl_context = "adhoc")  # testing HTTPS Local untuk menguji Secure cookie, SameSite, atau CSP

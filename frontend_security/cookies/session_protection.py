@@ -1,6 +1,6 @@
 from flask import Response, request, current_app
 from .utils import generate_token, generate_fingerprint, sign_data, verify_signature
-import time
+import time, hmac
 from typing import Callable, Optional
 
 def create_secure_session_cookie(

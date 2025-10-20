@@ -3,3 +3,6 @@ win_env
 
 # Log
 **.log
+
+# Dir
+frontend_security/cookies/__pycache__
