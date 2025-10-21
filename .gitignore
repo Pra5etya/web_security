@@ -4,5 +4,5 @@ win_env
 # Log
 **.log
 
-# Dir
-frontend_security/cookies/__pycache__
+# Cache
+**__pycache__

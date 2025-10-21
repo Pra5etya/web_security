@@ -6,7 +6,7 @@ from .permissions_policy import apply_permissions_policy
 from .legacy_modern import apply_legacy_modern_headers
 
 
-def apply_all_headers(response):
+def apply_secure_headers(response):
     """Gabungkan semua header keamanan menjadi satu fungsi."""
     response = apply_csp(response)
     response = apply_hsts(response)

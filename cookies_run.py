@@ -1,10 +1,12 @@
-from flask import Flask, request, jsonify
-from cookies import register_security_middleware, verify_csrf_request, verify_secure_session_cookie
+from flask import Flask
+
+from front_secure.cookies import apply_secure_cookies
 
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-me"
 
-register_security_middleware(app, excluded_routes=["login", "public_endpoint"])
+# Aktifkan semua lapisan keamanan
+apply_secure_cookies(app, excluded_routes=["login", "public_endpoint"])
 
 @app.route('/')
 def home():
@@ -20,12 +22,6 @@ def public_endpoint():
 
 @app.route("/update-profile", methods=["POST"])
 def update_profile():
-    if not verify_csrf_request(request):
-        return {"error": "CSRF verification failed"}, 403
-    
-    if not verify_secure_session_cookie(request):
-        return {"error": "Invalid session"}, 401
-    
     return {"message": "Profil berhasil diperbarui"}
 
 if __name__ == "__main__":

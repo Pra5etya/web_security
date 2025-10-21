@@ -1,7 +1,7 @@
 from flask import Flask
-from frontend_security.header import (
+from front_secure.header import (
     generate_nonce,
-    apply_all_headers
+    apply_secure_headers
 )
 
 app = Flask(__name__)
@@ -10,7 +10,7 @@ app = Flask(__name__)
 app.before_request(generate_nonce)
 
 # setelah request — terapkan semua header keamanan
-app.after_request(apply_all_headers)
+app.after_request(apply_secure_headers)
 
 @app.route("/")
 def index():
