@@ -1,4 +1,4 @@
-from .csp import generate_nonce, apply_csp
+from .csp import apply_csp
 from .hsts import apply_hsts
 from .frame_protection import apply_x_frame_options
 from .referrer_policy import apply_referrer_policy
