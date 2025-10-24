@@ -1,26 +1,38 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, session, redirect, url_for
 from basic_token.jwt_service import create_jwt_detailed, decode_jwt
 from basic_token.errors import TokenError
 import datetime
 
 app = Flask(__name__)
 
-# ---------------------------
-# Hardcoded config (backend)
-# ---------------------------
-HARDCODED_SECRET = "super_secret_key_12345"   # gunakan ini secara konsisten
-DEFAULT_ROLE = "user"
-TOKEN_DURATION_MINUTES = 30
+# =====================================================
+# KONFIGURASI FLASK & SESSION (AMAN)
+# =====================================================
+app.secret_key = "super_secret_flask_session_67890"
 
-# ===============================
-# TEMPLATE UNTUK HALAMAN GENERATE (FORM REGISTRASI)
-# ===============================
+# Cookie aman — tidak bisa dibaca lewat JS atau dikirim cross-site
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,   # tidak bisa diakses via document.cookie
+    SESSION_COOKIE_SECURE=False,    # ubah ke True di mode HTTPS
+    SESSION_COOKIE_SAMESITE="Lax"   # cegah CSRF dari domain lain
+)
+
+# =====================================================
+# KONFIGURASI BACKEND JWT
+# =====================================================
+HARDCODED_SECRET = "super_secret_key_12345"
+DEFAULT_ROLE = "user"
+TOKEN_DURATION_MINUTES = 1  # ubah ke 30 jika ingin durasi lebih lama
+
+# =====================================================
+# TEMPLATE HALAMAN GENERATE (REGISTRASI)
+# =====================================================
 GENERATE_TEMPLATE = """
 <!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <title>Generate JWT - Registrasi User</title>
+  <title>Generate JWT (Session-Safe)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 40px; background: #fafafa; }
     form { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 480px; }
@@ -34,7 +46,7 @@ GENERATE_TEMPLATE = """
   </style>
 </head>
 <body>
-  <h2>🔐 Form Registrasi User</h2>
+  <h2>🔐 Registrasi User (Token disimpan di Session)</h2>
   <form method="POST">
     <label>Username:</label>
     <input type="text" name="username" required>
@@ -56,46 +68,39 @@ GENERATE_TEMPLATE = """
       <div class="section">
         <h3>Header (decoded)</h3>
         <pre>{{ result.header | tojson(indent=2) }}</pre>
-        <strong>Header Base64URL:</strong>
-        <pre>{{ result.header_b64 }}</pre>
-      </div>
 
-      <div class="section">
         <h3>Payload (decoded)</h3>
         <pre>{{ result.payload | tojson(indent=2) }}</pre>
-        <strong>Payload Base64URL:</strong>
-        <pre>{{ result.payload_b64 }}</pre>
-      </div>
 
-      <div class="section">
         <h3>Signature</h3>
         <pre>{{ result.signature_b64 }}</pre>
       </div>
 
       <div class="section">
-        <h3>JWT Lengkap</h3>
-        <pre>{{ result.token }}</pre>
+        <h3>JWT disimpan di session</h3>
+        <p>Token tersimpan di sisi server sampai masa berlakunya habis.</p>
+        <form action="/decode" method="GET">
+          <button type="submit">🔍 Decode Token dari Session</button>
+        </form>
       </div>
-
-      <a href="/decode?token={{ result.token }}">🔍 Decode Token Ini</a>
     {% endif %}
   {% endif %}
 
   <hr>
-  <a href="/decode">Pergi ke halaman Decode</a>
+  <a href="/decode">Pergi ke halaman Decode Manual</a>
 </body>
 </html>
 """
 
-# ==============================
-# TEMPLATE UNTUK HALAMAN DECODE
-# ==============================
+# =====================================================
+# TEMPLATE HALAMAN DECODE
+# =====================================================
 DECODE_TEMPLATE = """
 <!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <title>Decode JWT</title>
+  <title>Decode JWT (Session-Aware)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 40px; background: #fafafa; }
     textarea { width: 100%; height: 100px; }
@@ -105,10 +110,11 @@ DECODE_TEMPLATE = """
 </head>
 <body>
   <h2>🔍 Decode JWT Token</h2>
+
   <form method="POST">
-    <label><strong>Masukkan Token:</strong></label><br>
-    <textarea name="token">{{ request.args.get('token', '') }}</textarea><br><br>
-    <button type="submit">Decode Token</button>
+    <label><strong>Masukkan Token (opsional):</strong></label><br>
+    <textarea name="token" placeholder="Kosongkan untuk pakai token dari session"></textarea><br><br>
+    <button type="submit">Decode</button>
   </form>
 
   {% if decoded %}
@@ -134,9 +140,9 @@ DECODE_TEMPLATE = """
 </html>
 """
 
-# ==============================
-# ROUTES
-# ==============================
+# =====================================================
+# ROUTE: GENERATE TOKEN
+# =====================================================
 @app.route("/", methods=["GET", "POST"])
 def generate():
     result = None
@@ -145,50 +151,68 @@ def generate():
         email = request.form.get("email")
         password = request.form.get("password")
 
-        # === Hardcoded Config (used internally only)===
-        secret = HARDCODED_SECRET
-        role = DEFAULT_ROLE
-        token_duration_minutes = TOKEN_DURATION_MINUTES
-
-        # expiry menggunakan timestamp (numeric) agar sesuai spesifikasi
-        exp_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=token_duration_minutes)
+        exp_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=TOKEN_DURATION_MINUTES)
         exp_ts = int(exp_time.timestamp())
 
-        # PAYLOAD: hanya fields yang berasal dari user input + server-side defaults
         payload = {
             "username": username,
             "email": email,
-            # NOTE: Untuk pembelajaran saja; di lingkungan nyata jangan letakkan raw password di JWT.
-            "password": password,
-            "role": role,
-            # exp sebagai integer UNIX timestamp (umumnya dipakai di JWT)
+            "password": password,  # ⚠️ hanya untuk belajar
+            "role": DEFAULT_ROLE,
             "exp": exp_ts
         }
 
         try:
-            # gunakan arg name 'secret' sesuai definisi create_jwt_detailed(...)
-            result = create_jwt_detailed(payload, secret=secret)
+            result = create_jwt_detailed(payload, secret=HARDCODED_SECRET)
+            session["jwt_token"] = result["token"]
+            session["token_expiry"] = exp_ts
         except Exception as e:
             result = {"error": str(e)}
 
     return render_template_string(GENERATE_TEMPLATE, result=result)
 
-
+# =====================================================
+# ROUTE: DECODE TOKEN
+# =====================================================
 @app.route("/decode", methods=["GET", "POST"])
 def decode():
     decoded = None
     error = None
+    token = None
+
+    # --- Cek apakah session sudah kadaluarsa ---
+    now_ts = int(datetime.datetime.utcnow().timestamp())
+    if session.get("token_expiry") and now_ts > session["token_expiry"]:
+        session.clear()  # hapus session jika token kadaluarsa
+        error = "❌ Session telah kadaluarsa (token expired). Silakan generate ulang."
+        return render_template_string(DECODE_TEMPLATE, error=error)
+
+    # --- Ambil token dari form atau session ---
     if request.method == "POST":
-        token = request.form.get("token")
+        token = request.form.get("token") or session.get("jwt_token")
+    else:
+        token = session.get("jwt_token")
+
+    if token:
         try:
-            # decode menggunakan same hardcoded secret supaya verifikasi signature berhasil
             decoded = decode_jwt(token, secret=HARDCODED_SECRET)
         except TokenError as e:
             error = str(e)
         except Exception as e:
             error = f"Error parsing token: {str(e)}"
+    else:
+        error = "Tidak ada token di session atau form."
+
     return render_template_string(DECODE_TEMPLATE, decoded=decoded, error=error)
 
+# =====================================================
+# ROUTE: LOGOUT / CLEAR SESSION
+# =====================================================
+@app.route("/logout")
+def logout():
+    """Hapus token & session dari server"""
+    session.clear()
+    return redirect(url_for("generate"))
 
 if __name__ == "__main__":
     app.run(debug=True)
