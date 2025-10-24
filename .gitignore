@@ -6,3 +6,6 @@ win_env
 
 # Cache
 **__pycache__
+
+# Database
+**.db
