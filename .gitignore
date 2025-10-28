@@ -9,3 +9,7 @@ win_env
 
 # Database
 **.db
+
+session_server
+
+**.sqlite

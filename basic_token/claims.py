@@ -1,45 +1,22 @@
-import datetime
-from .config import Config
-
+from datetime import datetime, timezone, timedelta
 
 def generate_standard_claims(custom_payload: dict,
                              issuer: str | None = None,
                              audience: str | None = None,
-                             expires_delta: datetime.timedelta | None = None) -> dict:
-    """
-    Membuat payload JWT lengkap dengan klaim standar (standard claims)
-    sesuai spesifikasi RFC 7519.
+                             expires_delta: timedelta | None = None) -> dict:
 
-    Parameter:
-    ----------
-    custom_payload : dict
-        Data kustom tambahan yang ingin disertakan di payload JWT
-        (misalnya: {"user_id": 1, "role": "admin"}).
+    ACCESS_EXPIRES = timedelta(minutes=5)
+    ISSUER = "jwt-learning-app"
+    AUDIENCE = "jwt-clients"
 
-    issuer : str | None, default=None
-        Nilai klaim "iss" (issuer) — pihak yang mengeluarkan token.
-        Jika None, akan menggunakan Config.ISSUER.
-
-    audience : str | None, default=None
-        Nilai klaim "aud" (audience) — pihak yang menjadi target token.
-        Jika None, akan menggunakan Config.AUDIENCE.
-
-    expires_delta : datetime.timedelta | None, default=None
-        Durasi waktu sebelum token kedaluwarsa.
-        Jika None, akan menggunakan Config.ACCESS_EXPIRES.
-
-    Return:
-    -------
-    dict : Payload JWT lengkap yang siap dikodekan menjadi token.
-    """
 
     # Waktu saat ini (UTC), karena JWT standar menggunakan UTC, bukan lokal time.
-    now = datetime.datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Gunakan nilai default dari konfigurasi jika parameter opsional tidak diberikan.
-    issuer = issuer or Config.ISSUER
-    audience = audience or Config.AUDIENCE
-    expires_delta = expires_delta or Config.ACCESS_EXPIRES
+    issuer = issuer or ISSUER
+    audience = audience or AUDIENCE
+    expires_delta = expires_delta or ACCESS_EXPIRES
 
     # Waktu kadaluarsa dihitung dari waktu sekarang + durasi expire
     exp_time = now + expires_delta
