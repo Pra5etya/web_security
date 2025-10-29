@@ -1,7 +1,7 @@
-# Hal yang akan terjadi jika token disimpan di query html (?)
+# 🔹 Urutan Belajar yang Disarankan
 
-1. 🔹 Tersimpan di history browser
-2. 🔹 Tercatat di log server (access log)
-3. 🔹 Terkirim di referrer header jika user pindah halaman
-4. 🔹 Mungkin dibagikan tanpa sengaja (misalnya copy-paste URL)
-5. 🔹 Bisa dicuri lewat plugin browser, reverse proxy, atau analitik web
+1. ✅ Refresh token
+2. 🔜 Bearer token & Authorization header
+3. 🔒 Rotation token
+4. ⏳ Grace period
+5. 🚫 Revocation / blacklist
