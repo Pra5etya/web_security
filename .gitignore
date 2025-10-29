@@ -10,6 +10,6 @@ win_env
 # Database
 **.db
 
-session_server
+sessions_server
 
 **.sqlite
