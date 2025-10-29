@@ -1,5 +1,5 @@
 from flask import Flask
-from front_secure.header import (
+from web_f_secure.header import (
     generate_nonce,
     apply_secure_headers
 )

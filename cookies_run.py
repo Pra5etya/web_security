@@ -1,6 +1,6 @@
 from flask import Flask
 
-from front_secure.cookies import apply_secure_cookies
+from web_f_secure.cookies import apply_secure_cookies
 
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-me"
