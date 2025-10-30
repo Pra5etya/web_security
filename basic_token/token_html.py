@@ -97,8 +97,12 @@ DECODE_TEMPLATE = """
       cursor: pointer;
     }
     .btn:hover { background-color: #0056b3; }
+
     .btn-logout { background-color: #dc3545; }
     .btn-logout:hover { background-color: #a71d2a; }
+
+    .btn-potected { background-color: #cbcf00; }
+    .btn-potected:hover { background-color: #dcdf00; }
   </style>
 </head>
 <body>
@@ -137,6 +141,7 @@ DECODE_TEMPLATE = """
 
   <hr>
   <a href="/" class="btn">⬅️ Kembali ke halaman Generate</a>
+  <a href="/protected" class="btn btn-potected">🔐 Test Bearer</a>
   <a href="/logout" class="btn btn-logout">🚪 Logout (hapus session)</a>
 </body>
 </html>

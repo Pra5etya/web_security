@@ -1,5 +1,5 @@
-from .claims import generate_standard_claims
-from .base64_utils import base64url_decode
+from .claims import token_standard_claims
+from .base64url import base64url_decode
 from .jwt_core import (build_header, encode_segment, sign_token, 
                        verify_signature, verify_timestamps)
 
@@ -21,7 +21,7 @@ def create_jwt(payload: dict, secret: str = None, algorithm: str = None) -> dict
     header = build_header(algorithm)
 
     # membuat payload (isi dari token)
-    payload = generate_standard_claims(payload)
+    payload = token_standard_claims(payload)
 
     # Encode header dan payload ke format Base64URL (tanpa '=')
     header_b64 = encode_segment(header)

@@ -2,13 +2,51 @@ import json                                     # Untuk serialisasi dan deserial
 import hmac                                     # Untuk operasi HMAC (hash-based message authentication code)
 import hashlib                                  # Untuk algoritma hash seperti SHA256
 
-from .base64_utils import base64url_encode      
+from .base64url import base64url_encode      
 from datetime import datetime, timezone
 
 
 # ------------------------------------------------------------
 # 1️⃣ HEADER
 # ------------------------------------------------------------
+"""
+List Algoritma Umum
+
+| Algoritma | Jenis Kunci     | Keamanan                      | Kecepatan       | Ukuran Token | Cocok Untuk                   |
+| --------- | --------------- | ----------------------------- | --------------- | ------------ | ----------------------------- |
+| **HS256** | Simetris        | Cukup aman (asal secret kuat) | 🔥 Sangat cepat | Kecil        | Sistem tunggal / internal     |
+| **RS512** | Asimetris (RSA) | Sangat aman                   | 🐢 Lambat       | Besar        | Sistem terdistribusi / publik |
+| **ES256** | Asimetris (EC)  | Sangat aman                   | ⚡ Cepat         | Kecil        | Sistem modern / efisien       |
+
+List Algoritma Detail
+
+| Algoritma             | Jenis               | Deskripsi                                           |
+| --------------------- | ------------------- | --------------------------------------------------- |
+| **HS256**             | Simetris            | HMAC-SHA256                                         |
+| **HS384**             | Simetris            | HMAC-SHA384                                         |
+| **HS512**             | Simetris            | HMAC-SHA512                                         |
+| **RS256/RS384/RS512** | Asimetris (RSA)     | RSA-SHAxxx                                          |
+| **ES256/ES384/ES512** | Asimetris (ECDSA)   | ECDSA-SHAxxx                                        |
+| **PS256/PS384/PS512** | Asimetris (RSA-PSS) | RSA-PSS dengan SHAxxx                               |
+
+
+List Parameter Header
+
+| Nama       | Arti                                                                        | Contoh                                        |
+| ---------- | --------------------------------------------------------------------------- | --------------------------------------------- |
+| `alg`      | Algoritma untuk menandatangani atau mengenkripsi JWT                        | `"HS256"`, `"RS512"`, `"ES256"`, `"none"`     |
+| `typ`      | Tipe token, biasanya `"JWT"`                                                | `"JWT"`                                       |
+| `cty`      | Content Type – digunakan jika JWT dibungkus (nested JWT)                    | `"JWT"`                                       |
+| `kid`      | Key ID – untuk mengidentifikasi kunci mana yang digunakan                   | `"key-01"`                                    |
+| `jku`      | JWK Set URL – URL untuk mengambil public keys (JWK Set)                     | `"https://example.com/.well-known/jwks.json"` |
+| `crit`     | Critical – daftar parameter yang penerima **harus pahami** agar token valid | `["exp", "aud"]`                              |
+| `ver`      | Versi token                                                                 | `"1.0"`                                       |
+| `iss`      | Issuer di header (biasanya di payload, tapi bisa di header)                 | `"auth.example.com"`                          |
+| `env`      | Lingkungan aplikasi (dev/staging/prod)                                      | `"production"`                                |
+| `ts`       | Timestamp pembuatan JWT                                                     | `1730262000`                                  |
+| `app`      | Nama aplikasi penerbit                                                      | `"MyAppAPI"`                                  |
+
+"""
 def build_header(algorithm: str = "HS256") -> dict:
     return {"alg": algorithm, 
             "typ": "JWT"}

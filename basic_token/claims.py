@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
-def generate_standard_claims(custom_payload: dict,
+def token_standard_claims(custom_payload: dict,
                              issuer: str | None = None,
                              audience: str | None = None,
                              expires_delta: timedelta | None = None) -> dict:

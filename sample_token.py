@@ -11,6 +11,8 @@ from basic_token.token_db import (
 )
 from datetime import datetime, timezone, timedelta
 import os
+from functools import wraps
+import shutil
 
 # =====================================================
 # KONFIGURASI APLIKASI
@@ -32,6 +34,7 @@ app.config.update(
 )
 Session(app)
 
+
 # =====================================================
 # KONFIGURASI TOKEN
 # =====================================================
@@ -39,6 +42,64 @@ HARDCODED_SECRET = "super_secret_key_12345"
 DEFAULT_ROLE = "user"
 TOKEN_DURATION_MINUTES = 1
 REFRESH_DURATION_MINUTES = 5
+
+
+# =====================================================
+# HELPER: Ambil Bearer Token dari Authorization Header
+# =====================================================
+def get_bearer_token():
+    """Ambil token dari header Authorization (format: Bearer <token>)"""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1].strip()
+    return None
+
+
+# =====================================================
+# HELPER: Hapus semua session di direktori SESSION_DIR
+# =====================================================
+def clear_all_sessions():
+    """Menghapus seluruh file session di ./sessions_server"""
+    try:
+        for f in os.listdir(SESSION_DIR):
+            file_path = os.path.join(SESSION_DIR, f)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        print("🧹 Semua session dihapus dari folder sessions_server")
+    except Exception as e:
+        print(f"⚠️ Gagal menghapus session files: {e}")
+
+
+# =====================================================
+# DECORATOR: token_required
+# =====================================================
+def token_required(f):
+    """Decorator untuk memeriksa validitas token di setiap endpoint"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        username = session.get("username")
+        refresh_token = session.get("refresh_token")
+        token_expiry = session.get("token_expiry", 0)
+        refresh_expiry = session.get("refresh_expiry", 0)
+
+        # Jika access token dan refresh token keduanya sudah expired
+        if now_ts > token_expiry and now_ts > refresh_expiry:
+            print("⚠️ Kedua token kadaluarsa → hapus session dan revoke DB")
+            if username:
+                revoke_user_tokens(username)
+            session.clear()
+            clear_all_sessions()  # <--- tambahkan di sini
+            return redirect(url_for("generate"))
+
+        # Jika access token expired tapi refresh masih valid → redirect ke refresh
+        if now_ts > token_expiry and now_ts < refresh_expiry:
+            print("♻️ Access token kadaluarsa → redirect ke /refresh")
+            return redirect(url_for("refresh"))
+
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 # =====================================================
 # ROUTE: GENERATE TOKEN BARU
@@ -116,6 +177,7 @@ def generate():
 # ROUTE: DECODE TOKEN (dengan debug per baris)
 # =====================================================
 @app.route("/decode", methods=["GET", "POST"])
+@token_required
 def decode():
     decoded = None
     error = None
@@ -137,8 +199,9 @@ def decode():
             print("✅ Refresh token masih valid → redirect ke /refresh\n")
             return redirect(url_for("refresh"))
         else:
-            print("❌ Kedua token kadaluarsa, hapus session\n")
+            print("❌ Kedua token kadaluarsa, hapus session dan file session\n")
             session.clear()
+            clear_all_sessions()  # <--- tambahkan di sini juga
             error = "❌ Token dan refresh token telah kadaluarsa."
             return render_template_string(DECODE_TEMPLATE, error=error)
 
@@ -146,6 +209,9 @@ def decode():
     if request.method == "POST" and request.form.get("token"):
         token = request.form.get("token").strip()
         token_source = "form"
+    elif get_bearer_token():
+        token = get_bearer_token()
+        token_source = "Authorization header"
     elif session.get("jwt_token"):
         token = session.get("jwt_token")
         token_source = "session"
@@ -166,6 +232,7 @@ def decode():
         except Exception as e:
             error = f"Error parsing token: {str(e)}"
             print(f"❌ Gagal decode token: {error}")
+            clear_all_sessions()  # <--- jika token invalid
 
     print("========================\n")
 
@@ -178,6 +245,7 @@ def decode():
 # ROUTE: REFRESH TOKEN
 # =====================================================
 @app.route("/refresh")
+@token_required
 def refresh():
     now_ts = int(datetime.now(timezone.utc).timestamp())
 
@@ -191,12 +259,14 @@ def refresh():
 
     if not refresh_token or not username:
         print("❌ Tidak ada refresh token atau username dalam session\n")
+        clear_all_sessions()
         return redirect(url_for("generate"))
 
     if now_ts > session.get("refresh_expiry", 0):
         print("❌ Refresh token kadaluarsa → hapus session & revoke DB\n")
         revoke_user_tokens(username)
         session.clear()
+        clear_all_sessions()
         return redirect(url_for("generate"))
 
     try:
@@ -233,6 +303,7 @@ def refresh():
         print(f"❌ Gagal decode refresh token: {e}\n")
         revoke_user_tokens(username)
         session.clear()
+        clear_all_sessions()
         return f"Refresh token tidak valid: {str(e)}"
 
 
@@ -245,7 +316,8 @@ def logout():
     if username:
         revoke_user_tokens(username)
     session.clear()
-    print("🔒 Logout → token direvoke & session dihapus\n")
+    clear_all_sessions()
+    print("🔒 Logout → token direvoke & semua session dihapus\n")
     return redirect(url_for("generate"))
 
 
@@ -253,6 +325,7 @@ def logout():
 # ROUTE: CEK ISI DATABASE (debug)
 # =====================================================
 @app.route("/db")
+@token_required
 def show_db():
     rows = get_all_tokens()
     print("\n===== DEBUG DATABASE =====")
@@ -260,6 +333,35 @@ def show_db():
         print(row)
     print("==========================\n")
     return f"<pre>{rows}</pre>"
+
+
+# =====================================================
+# ROUTE: PROTECTED API (harus pakai Bearer token)
+# =====================================================
+@app.route("/protected")
+@token_required
+def protected():
+    # Bisa ambil token dari Authorization header atau session
+    token = get_bearer_token() or session.get("jwt_token")
+    token_source = "Authorization header" if get_bearer_token() else "session"
+
+    if not token:
+        clear_all_sessions()
+        return {"error": "Missing Bearer or session token"}, 401
+
+    try:
+        decoded = decode_jwt(token, secret=HARDCODED_SECRET)
+        username = decoded["payload"].get("username", "Unknown")
+        role = decoded["payload"].get("role", "user")
+        return {
+            "message": f"Welcome, {username}! You have {role} access.",
+            "token_source": token_source,
+            "issued_at": decoded["payload"].get("iat"),
+            "expires_at": decoded["payload"].get("exp"),
+        }
+    except Exception as e:
+        clear_all_sessions()
+        return {"error": f"Invalid or expired token: {str(e)}"}, 401
 
 
 # =====================================================
