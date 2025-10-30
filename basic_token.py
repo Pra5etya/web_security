@@ -245,7 +245,6 @@ def decode():
 # ROUTE: REFRESH TOKEN
 # =====================================================
 @app.route("/refresh")
-@token_required
 def refresh():
     now_ts = int(datetime.now(timezone.utc).timestamp())
 
